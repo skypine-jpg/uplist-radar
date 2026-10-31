@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Alerts — Uplist Radar{% endblock %}
+{% block content %}
+<h1>Alerts</h1>
+<form class="inline" method="post" action="{{ url_for('alerts_read_all') }}">
+  <button type="submit">Mark all read</button>
+</form>
+<div class="card" style="margin-top:1rem">
+<table><tr><th>When</th><th>Type</th><th>Alert</th><th></th></tr>
+{% for a in alerts %}
+<tr class="{% if not a.is_read %}alert-unread{% endif %}">
+  <td class="meta">{{ a.created_at[:16] }}</td>
+  <td><span class="pill {% if a.alert_type=='scan_failure' %}sev-high{% else %}stage-preparation{% endif %}">{{ a.alert_type }}</span></td>
+  <td><b>{{ a.title }}</b>{% if a.company_id %} — <a href="{{ url_for('company', cid=a.company_id) }}">{{ a.ticker or a.company_name or '' }}</a>{% endif %}
+      {% if a.body %}<div class="meta">{{ a.body[:300] }}</div>{% endif %}</td>
+  <td>{% if not a.is_read %}<form class="inline" method="post" action="{{ url_for('alert_read', aid=a.id) }}"><button type="submit">✓</button></form>{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="4" class="unknown">No alerts.</td></tr>
+{% endfor %}</table>
+</div>
+{% endblock %}

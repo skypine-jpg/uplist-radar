@@ -1,0 +1,9 @@
+flask>=3.0
+apscheduler>=3.10
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+reportlab>=4.0
+markdown>=3.5
+cryptography>=42.0
+gunicorn>=21

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Uplist Radar{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><a href="{{ url_for('dashboard') }}">◉ Uplist Radar</a>
+    <span class="tagline">OTC → Nasdaq / NYSE / NYSE American intelligence</span></div>
+  {% if session.get('user_id') %}
+  <nav>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+    <a href="{{ url_for('candidates') }}">Candidates</a>
+    <a href="{{ url_for('watchlist') }}">Watchlist</a>
+    <a href="{{ url_for('reports') }}">Reports</a>
+    <a href="{{ url_for('alerts') }}">Alerts{% if unread_alerts %} <span class="badge">{{ unread_alerts }}</span>{% endif %}</a>
+    <a href="{{ url_for('admin') }}">Admin</a>
+    <a href="{{ url_for('logout') }}" class="muted">Logout ({{ session.get('username') }})</a>
+  </nav>
+  {% endif %}
+</header>
+<main>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+    <div class="flash {{ cat }}">{{ msg }}</div>
+  {% endfor %}
+{% endwith %}
+{% block content %}{% endblock %}
+</main>
+<footer>Uplist Radar · SEC EDGAR-sourced · Not investment advice · All figures link to source filings</footer>
+</body>
+</html>

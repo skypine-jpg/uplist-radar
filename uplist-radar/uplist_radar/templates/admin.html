@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Admin — Uplist Radar{% endblock %}
+{% block content %}
+<h1>Administration</h1>
+
+<div class="grid cols-2">
+<div class="card">
+  <h2>Scheduler</h2>
+  <dl class="kv">
+    <dt>Status</dt><dd>{% if scan_enabled %}<span class="ok-text">Enabled</span>{% else %}<span class="warn-text">Disabled</span>{% endif %} — daily {{ scan_time }} ({{ scan_tz }})</dd>
+    <dt>Next run</dt><dd>{{ next_run or '<span class="unknown">Unknown — start the app to run the in-process scheduler</span>'|safe }}</dd>
+  </dl>
+  <form class="inline" method="post" action="{{ url_for('scan_now') }}">
+    <input type="hidden" name="mode" value="manual">
+    <button class="primary" type="submit">Scan now (incremental)</button>
+  </form>
+  <form class="inline" method="post" action="{{ url_for('scan_now') }}" onsubmit="return confirm('Run the full 12-month initial scan? This takes a while and is resumable.')">
+    <input type="hidden" name="mode" value="initial">
+    <button type="submit">Initial 12-month scan</button>
+  </form>
+  <h3>Edit schedule</h3>
+  <form method="post">
+    <input type="hidden" name="action" value="save_schedule">
+    <div class="filters">
+      <div><label>Time (HH:MM)</label><input name="scan_time" value="{{ scan_time }}" pattern="\d{2}:\d{2}" required></div>
+      <div><label>Timezone</label><input name="scan_tz" value="{{ scan_tz }}" required></div>
+      <div><label>Enabled</label><input type="checkbox" name="scan_enabled" {% if scan_enabled %}checked{% endif %}></div>
+      <div><button class="primary" type="submit">Save</button></div>
+    </div>
+  </form>
+  <p class="meta">The in-process scheduler handles DST via the IANA timezone. For operation when this process is stopped, deploy with the provided systemd unit/Docker image (see README) — the scan CLI is <span class="mono">scripts/scan_now.py</span>.</p>
+</div>
+
+<div class="card">
+  <h2>SEC access</h2>
+  <form method="post">
+    <input type="hidden" name="action" value="save_sec">
+    <div class="filters">
+      <div><label>Contact email (required by SEC for the User-Agent)</label>
+        <input name="sec_contact_email" value="{{ settings.sec_contact_email }}" size="32" placeholder="you@example.com"></div>
+      <div><button class="primary" type="submit">Save</button></div>
+    </div>
+  </form>
+  <p class="meta">SEC policy requires automated tools to identify themselves. Without a contact email, EDGAR may throttle or block requests.</p>
+  <h3>Email delivery (optional)</h3>
+  <form method="post">
+    <input type="hidden" name="action" value="save_email">
+    <div class="filters">
+      <div><label>Enabled</label><input type="checkbox" name="email_enabled" {% if settings.email_enabled=='1' %}checked{% endif %}></div>
+      <div><label>Recipients (comma-separated)</label><input name="email_recipients" value="{{ settings.email_recipients }}" size="30"></div>
+      <div><label>SMTP host</label><input name="smtp_host" value="{{ settings.smtp_host }}"></div>
+      <div><label>Port</label><input name="smtp_port" value="{{ settings.smtp_port }}" size="6"></div>
+      <div><label>SMTP user</label><input name="smtp_user" value="{{ settings.smtp_user }}"></div>
+      <div><label>From</label><input name="smtp_from" value="{{ settings.smtp_from }}"></div>
+      <div><label>SMTP password (stored encrypted)</label><input type="password" name="smtp_password" placeholder="unchanged"></div>
+      <div><button class="primary" type="submit">Save</button></div>
+    </div>
+  </form>
+  <p class="meta">External sending stays <b>disabled</b> until you enable it here. In-app notifications are always on.</p>
+</div>
+</div>
+
+<div class="card">
+  <h2>Scan runs</h2>
+  <table><tr><th>#</th><th>Started</th><th>Mode</th><th>Status</th><th>Window</th><th>Found</th><th>Analyzed</th><th>New</th><th>Stage Δ</th><th></th></tr>
+  {% for r in runs %}
+  <tr><td>{{ r.id }}</td><td class="meta">{{ (r.started_at or '')[:16] }}</td><td>{{ r.mode }}</td>
+    <td><b class="{% if r.status=='success' %}ok-text{% elif r.status=='failed' %}bad-text{% else %}warn-text{% endif %}">{{ r.status }}</b></td>
+    <td class="meta">{{ r.window_start }} → {{ r.window_end }}</td>
+    <td>{{ r.filings_found }}</td><td>{{ r.filings_fetched }}</td><td>{{ r.new_companies }}</td><td>{{ r.stage_changes }}</td>
+    <td>{% if r.status in ('failed','partial') %}
+      <form class="inline" method="post" action="{{ url_for('retry_run', run_id=r.id) }}"><button type="submit">Retry</button></form>{% endif %}
+      {% if r.error %}<details><summary>error</summary><pre class="log">{{ r.error[:2000] }}</pre></details>{% endif %}
+    </td></tr>
+  {% else %}<tr><td colspan="10" class="unknown">No runs yet.</td></tr>{% endfor %}</table>
+</div>
+
+<div class="card">
+  <h2>Data providers</h2>
+  <table><tr><th>Provider</th><th>Kind</th><th>Status</th><th>Notes / config</th><th></th></tr>
+  {% for p in providers %}
+  <tr><td><b>{{ p.name }}</b><br><span class="mono meta">{{ p.key }}</span></td><td>{{ p.kind }}</td>
+    <td><span class="pill {% if p.status=='ok' %}stage-trading_commenced{% elif p.status=='degraded' %}stage-preparation{% elif p.status=='not_configured' %}excluded{% else %}sev-high{% endif %}">{{ p.status }}</span>
+      <div class="meta">last used: {{ (p.last_used_at or '')[:16] or 'never' }}</div></td>
+    <td class="meta" style="max-width:380px">{{ (p.config_json|fromjson).note if p.config_json else '' }}</td>
+    <td><details><summary>Configure</summary>
+      <form method="post">
+        <input type="hidden" name="action" value="save_provider">
+        <input type="hidden" name="provider_key" value="{{ p.key }}">
+        <label>Status <select name="provider_status">
+          {% for s in ['unknown','ok','degraded','not_configured','error'] %}
+          <option {% if p.status==s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></label><br>
+        <label>API key (stored encrypted)<br><input type="password" name="provider_api_key" placeholder="unchanged"></label><br>
+        <label>Config JSON<br><textarea name="provider_config" rows="3" cols="40">{{ p.config_json }}</textarea></label><br>
+        <button class="primary" type="submit">Save</button>
+      </form></details></td></tr>
+  {% endfor %}</table>
+  <p class="meta"><b>Coverage:</b> SEC EDGAR covers all SEC filers (primary source). Market-data coverage: Stooq best-effort only — OTC coverage is incomplete. <b>A properly licensed market-data provider (e.g. OTC Markets, Polygon, Nasdaq Data Link) is required for production quotes, volume, and market cap.</b> Until configured, price/market-cap fields show “Unknown”.</p>
+</div>
+
+<div class="grid cols-2">
+<div class="card">
+  <h2>Stored secrets (encrypted)</h2>
+  {% if secret_keys %}<ul class="mono">{% for k in secret_keys %}<li>{{ k }}</li>{% endfor %}</ul>
+  {% else %}<p class="unknown">None stored.</p>{% endif %}
+  <p class="meta">Secrets are encrypted at rest. Values are never displayed.</p>
+</div>
+<div class="card">
+  <h2>Rules versions</h2>
+  <table><tr><th>Ruleset</th><th>Version</th><th>Active</th></tr>
+  {% for rv in rules_v %}<tr><td>{{ rv.name }}</td><td class="mono">{{ rv.version }}</td><td>{{ 'yes' if rv.active else 'no' }}</td></tr>{% endfor %}</table>
+</div>
+</div>
+
+<div class="card">
+  <h2>Audit trail</h2>
+  <table><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th><th>Detail</th></tr>
+  {% for a in audit %}<tr><td class="meta">{{ (a.created_at or '')[:16] }}</td><td>{{ a.actor }}</td>
+    <td class="mono">{{ a.action }}</td><td class="meta">{{ a.entity }} {{ a.entity_id or '' }}</td>
+    <td class="meta">{{ (a.detail or '')[:120] }}</td></tr>{% endfor %}</table>
+</div>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Candidates — Uplist Radar{% endblock %}
+{% block content %}
+<h1>Candidates</h1>
+
+<form class="card" method="get">
+  <div class="filters">
+    <div><label>Search</label><input name="q" value="{{ filters.q }}" placeholder="ticker, name, CIK"></div>
+    <div><label>Target exchange</label><select name="exchange">
+      <option value="">All</option>
+      {% for e in ['Nasdaq','NYSE','NYSE American','Unknown'] %}
+      <option value="{{ e }}" {% if filters.exchange==e %}selected{% endif %}>{{ e }}</option>{% endfor %}
+    </select></div>
+    <div><label>Stage</label><select name="stage">
+      <option value="">All</option>
+      {% for k,v in stages.items() %}
+      <option value="{{ k }}" {% if filters.stage==k %}selected{% endif %}>{{ v.label }}</option>{% endfor %}
+    </select></div>
+    <div><label>Group</label><select name="group">
+      <option value="">All</option>
+      {% for g in stage_groups %}
+      <option value="{{ g.key }}" {% if filters.group==g.key %}selected{% endif %}>{{ g.label }}</option>{% endfor %}
+      <option value="completed" {% if filters.group=='completed' %}selected{% endif %}>Completed — trading commenced</option>
+      <option value="withdrawn" {% if filters.group=='withdrawn' %}selected{% endif %}>Withdrawn / rejected</option>
+    </select></div>
+    <div><label>OTC status</label><select name="otc">
+      <option value="">All</option>
+      <option value="verified" {% if filters.otc=='verified' %}selected{% endif %}>Verified OTC only</option>
+    </select></div>
+    <div><label>Filing type</label><input name="form" value="{{ filters.form }}" placeholder="e.g. 8-K" size="8"></div>
+    <div><label>Date from</label><input type="date" name="date_from" value="{{ filters.date_from }}"></div>
+    <div><label>Date to</label><input type="date" name="date_to" value="{{ filters.date_to }}"></div>
+    <div><label>Sector</label><select name="sector">
+      <option value="">All</option>
+      {% for s in sectors %}<option {% if filters.sector==s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+    </select></div>
+    <div><label>Min strength</label><input type="number" name="min_strength" min="0" max="100" value="{{ filters.min_strength }}" size="4"></div>
+    <div><label>Sort</label><select name="sort">
+      {% for k,l in [('priority','Priority (stage → strength)'),('strength','Strength'),('name','Name'),('ticker','Ticker'),('stage','Stage'),('checked','Last checked'),('exchange','Exchange')] %}
+      <option value="{{ k }}" {% if filters.sort==k %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <select name="dir"><option value="desc" {% if filters.dir=='desc' %}selected{% endif %}>↓</option><option value="asc" {% if filters.dir=='asc' %}selected{% endif %}>↑</option></select></div>
+    <div><button class="primary" type="submit">Apply</button>
+      <a class="btn" href="{{ url_for('candidates') }}">Reset</a></div>
+  </div>
+</form>
+
+<div class="card">
+<p class="meta">{{ companies|length }} companies · <a href="{{ url_for('candidates_csv', **request.args) }}">Export CSV</a></p>
+<p class="meta">Three separate assessments — a listing catalyst is not a buying opportunity.</p>
+<table>
+<tr><th colspan="4">A. Uplisting stage &amp; evidence strength</th><th>B. Outstanding conditions &amp; freshness</th><th>C. Investment risk</th></tr>
+<tr class="subhead"><th>Company</th><th>Group</th><th>Stage</th><th>Strength</th><th>Open items / last evidence</th><th>Dilution, warrants, converts, cash</th></tr>
+{% for c in companies %}
+<tr>
+  <td><a href="{{ url_for('company', cid=c.id) }}">{{ c.name[:45] }}</a><br>
+      <span class="mono meta">{{ c.ticker or '?' }} · {{ c.cik }}</span></td>
+  <td class="meta">{{ c.group.label }}</td>
+  <td><span class="pill stage-{{ c.stage }}">{{ stages[c.stage].label }}</span><br>
+      <span class="meta">{{ c.target_exchange or 'Unknown' }}</span></td>
+  <td><span class="strength s-{% if c.evidence_strength>=75 %}vs{% elif c.evidence_strength>=50 %}s{% elif c.evidence_strength>=25 %}m{% else %}w{% endif %}">{{ c.evidence_strength }}</span></td>
+  <td style="max-width:280px">
+    {% if c.outstanding_n %}<b>{{ c.outstanding_n }} outstanding</b><br>{% endif %}
+    {% for i in c.outstanding_items %}<span class="meta">· {{ i.item }}: {{ i.detail[:110] }}</span><br>{% endfor %}
+    <span class="meta">Last evidence: {% if c.freshness_days is not none %}{{ c.freshness_days }}d ago{% else %}<span class="unknown">Unknown</span>{% endif %}{% if c.freshness_days and c.freshness_days > 180 %} <span class="warn-text">(stale)</span>{% endif %}</span>
+  </td>
+  <td style="max-width:240px">{% for fl in c.flags[:4] %}<span class="pill sev-{{ fl.severity }}">{{ fl.flag }}</span> {% endfor %}{% if not c.flags %}<span class="unknown">No risk flags found</span>{% endif %}</td>
+</tr>
+{% endfor %}
+</table>
+{% if not companies %}<p class="unknown">No companies match these filters.</p>{% endif %}
+</div>
+{% endblock %}

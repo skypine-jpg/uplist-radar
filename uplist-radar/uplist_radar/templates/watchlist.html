@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Watchlist — Uplist Radar{% endblock %}
+{% block content %}
+<h1>Watchlist</h1>
+<div class="card">
+  <h2>Monitor a company manually</h2>
+  <form method="post" class="filters">
+    <div><label>Ticker, company name, or SEC CIK</label>
+      <input name="ident" placeholder="e.g. BRQL, or 0001854526" size="30" required></div>
+    <div><button class="primary" type="submit">Add &amp; monitor</button></div>
+  </form>
+  <p class="meta">Manually added companies are checked every scan for new filings across all monitored forms, and share the same public filing ingestion as discovered companies. Your notes and notification settings stay private.</p>
+</div>
+<div class="card">
+  <h2>Your watchlist</h2>
+  {% if rows %}<table><tr><th>Company</th><th>Ticker</th><th>Target</th><th>Stage</th><th>Strength</th><th>Last checked</th></tr>
+  {% for c in rows %}<tr>
+    <td><a href="{{ url_for('company', cid=c.id) }}">{{ c.name[:50] }}</a></td>
+    <td class="mono">{{ c.ticker or '<span class="unknown">Unknown</span>'|safe }}</td>
+    <td>{{ c.target_exchange or 'Unknown' }}</td>
+    <td><span class="pill stage-{{ c.stage }}">{{ STAGES[c.stage].label }}</span></td>
+    <td>{{ c.evidence_strength }}</td>
+    <td class="meta">{{ (c.last_checked_at or '')[:10] }}</td></tr>
+  {% endfor %}</table>{% else %}<p class="unknown">Your watchlist is empty.</p>{% endif %}
+</div>
+{% endblock %}

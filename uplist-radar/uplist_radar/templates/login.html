@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Login — Uplist Radar{% endblock %}
+{% block content %}
+<div class="login-wrap">
+  <div class="card">
+    <h1>◉ Uplist Radar</h1>
+    <p class="meta">OTC → Nasdaq / NYSE / NYSE American intelligence. Sign in to continue.</p>
+    <form method="post">
+      <label>Username<br><input name="username" autocomplete="username" required></label><br>
+      <label>Password<br><input name="password" type="password" autocomplete="current-password" required></label><br>
+      <button class="primary" type="submit" style="width:100%">Sign in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

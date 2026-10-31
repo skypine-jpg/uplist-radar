@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ r.title }} — Uplist Radar{% endblock %}
+{% block content %}
+<h1>{{ r.title }}</h1>
+<p class="meta">Generated {{ r.created_at }} ·
+  <a href="{{ url_for('report_pdf', rid=r.id) }}">Download PDF</a> ·
+  <a href="{{ url_for('report_csv', rid=r.id) }}">Download CSV</a> ·
+  <a href="{{ url_for('reports') }}">Archive</a></p>
+<div class="card">{{ html|safe }}</div>
+{% endblock %}

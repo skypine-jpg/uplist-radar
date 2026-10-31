@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Uplist Radar{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="grid cols-3">
+  <div class="card"><div class="stat">{{ counts.candidates }}</div><div class="stat-label">Active candidates</div></div>
+  <div class="card"><div class="stat">{{ verified_otc }}</div><div class="stat-label">Verified OTC issuers</div></div>
+  <div class="card"><div class="stat">{{ counts.unread }}</div><div class="stat-label">Unread alerts</div></div>
+</div>
+
+<h2>Candidate pipeline</h2>
+<p class="meta">One record per company. Ranked by documented stage, then evidence strength.
+A company advances only on new qualifying evidence — never on filing volume.</p>
+{% for g in groups %}
+<div class="card">
+  <h2>{{ g.meta.label }} <span class="meta">({{ g.companies|length }})</span></h2>
+  <p class="meta">{{ g.meta.use }}</p>
+  {% if g.companies %}
+  <table><tr><th>Company</th><th>Ticker</th><th>Target</th><th>OTC verified</th><th>Evidence strength</th><th>Updated</th></tr>
+  {% for c in g.companies %}
+    <tr><td><a href="{{ url_for('company', cid=c.id) }}">{{ c.name[:55] }}</a></td>
+        <td>{{ c.ticker or '?' }}</td>
+        <td>{{ c.target_exchange or '<span class="unknown">Unknown</span>'|safe }}</td>
+        <td>{% if c.otc_status=='verified_otc' %}<span class="pill">OTC</span>{% else %}<span class="unknown">Unknown</span>{% endif %}</td>
+        <td>{{ c.evidence_strength }}</td>
+        <td class="meta">{{ (c.stage_updated_at or '')[:10] }}</td></tr>
+  {% endfor %}</table>
+  {% else %}<p class="unknown">None.</p>{% endif %}
+</div>
+{% endfor %}
+
+<div class="grid cols-2">
+<div class="card">
+  <h2>Completed — trading commenced <span class="meta">({{ completed|length }})</span></h2>
+  <p class="meta">Historical archive; not active candidates.</p>
+  {% if completed %}<table><tr><th>Company</th><th>Updated</th></tr>
+  {% for c in completed %}
+    <tr><td><a href="{{ url_for('company', cid=c.id) }}">{{ c.ticker or '?' }} — {{ c.name[:40] }}</a></td>
+        <td class="meta">{{ (c.stage_updated_at or '')[:10] }}</td></tr>
+  {% endfor %}</table>{% else %}<p class="unknown">None yet.</p>{% endif %}
+</div>
+<div class="card">
+  <h2>Withdrawn / rejected <span class="meta">({{ withdrawn|length }})</span></h2>
+  <p class="meta">Separate outcome; not active candidates.</p>
+  {% if withdrawn %}<table><tr><th>Company</th><th>Updated</th></tr>
+  {% for c in withdrawn %}
+    <tr><td><a href="{{ url_for('company', cid=c.id) }}">{{ c.ticker or '?' }} — {{ c.name[:40] }}</a></td>
+        <td class="meta">{{ (c.stage_updated_at or '')[:10] }}</td></tr>
+  {% endfor %}</table>{% else %}<p class="unknown">None.</p>{% endif %}
+</div>
+</div>
+
+<div class="grid cols-2">
+<div class="card">
+  <h2>Scan health</h2>
+  {% if last_run %}
+  <dl class="kv">
+    <dt>Last run</dt><dd>#{{ last_run.id }} · {{ last_run.mode }} · <b>{{ last_run.status }}</b></dd>
+    <dt>Window</dt><dd>{{ last_run.window_start }} → {{ last_run.window_end }}</dd>
+    <dt>Filings</dt><dd>{{ last_run.filings_found }} found · {{ last_run.filings_fetched }} analyzed · {{ last_run.filings_failed }} failed · {{ last_run.filings_excluded }} excluded</dd>
+    <dt>Outcomes</dt><dd>{{ last_run.new_companies }} new · {{ last_run.stage_changes }} stage changes</dd>
+    <dt>Schedule</dt><dd>{% if scan_enabled %}Daily {{ scan_time }} {{ scan_tz }}{% else %}<span class="warn-text">Disabled</span>{% endif %}</dd>
+    <dt>Next run</dt><dd>{% if next_run %}{{ next_run }}{% else %}<span class="unknown">Unknown — scheduler not running in this process</span>{% endif %}</dd>
+  </dl>
+  {% if last_run.status in ('failed','partial') %}
+    <p class="bad-text"><b>Last scan {{ last_run.status }}.</b> This is not reported as “no changes”. <a href="{{ url_for('admin') }}">Review &amp; retry in Admin</a>.</p>
+  {% endif %}
+  {% else %}
+    <p class="unknown">No scans have run yet. <a href="{{ url_for('admin') }}">Start one in Admin</a>.</p>
+  {% endif %}
+  {% if failures %}
+  <h3>Recent failures</h3>
+  <ul>{% for f in failures %}<li>#{{ f.id }} {{ f.started_at }} — <b>{{ f.status }}</b></li>{% endfor %}</ul>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Upcoming announced trading dates</h2>
+  {% if upcoming %}
+  <table><tr><th>Company</th><th>Expected date</th><th>Disclosed</th></tr>
+  {% for u in upcoming %}
+    <tr><td><a href="{{ url_for('company', cid=u.id) }}">{{ u.ticker or u.name }}</a></td>
+        <td><b>{{ u.event_date }}</b></td><td class="meta">{{ u.filing_date }}</td></tr>
+  {% endfor %}</table>
+  {% else %}<p class="unknown">None upcoming.</p>{% endif %}
+</div>
+</div>
+
+<div class="grid cols-2">
+<div class="card">
+  <h2>New discoveries (7d)</h2>
+  {% if new_disc %}<table><tr><th>Company</th><th>Target</th><th>Stage</th><th>Strength</th></tr>
+  {% for c in new_disc %}
+    <tr><td><a href="{{ url_for('company', cid=c.id) }}">{{ c.ticker or '?' }} — {{ c.name[:40] }}</a></td>
+        <td>{{ c.target_exchange }}</td>
+        <td><span class="pill stage-{{ c.stage }}">{{ STAGES[c.stage].label }}</span></td>
+        <td>{{ c.evidence_strength }}</td></tr>
+  {% endfor %}</table>{% else %}<p class="unknown">None.</p>{% endif %}
+</div>
+<div class="card">
+  <h2>Latest stage changes</h2>
+  {% if stage_changes %}<table><tr><th>Company</th><th>Change</th><th>When</th></tr>
+  {% for s in stage_changes %}
+    <tr><td><a href="{{ url_for('company', cid=s.company_id) }}">{{ s.ticker or s.name[:30] }}</a></td>
+        <td class="meta">{{ STAGES[s.from_stage].label if s.from_stage else '—' }} → <b>{{ STAGES[s.to_stage].label }}</b></td>
+        <td class="meta">{{ s.changed_at[:10] }}</td></tr>
+  {% endfor %}</table>{% else %}<p class="unknown">None yet.</p>{% endif %}
+</div>
+</div>
+
+<div class="card">
+  <h2>Your watchlist</h2>
+  {% if watch %}<table><tr><th>Company</th><th>Stage</th><th>Strength</th></tr>
+  {% for c in watch %}
+    <tr><td><a href="{{ url_for('company', cid=c.id) }}">{{ c.ticker or '?' }} — {{ c.name[:40] }}</a></td>
+        <td><span class="pill stage-{{ c.stage }}">{{ STAGES[c.stage].label }}</span></td>
+        <td>{{ c.evidence_strength }}</td></tr>
+  {% endfor %}</table>{% else %}<p class="unknown">Empty. <a href="{{ url_for('watchlist') }}">Add companies</a>.</p>{% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Reports — Uplist Radar{% endblock %}
+{% block content %}
+<h1>Report archive</h1>
+<div class="card">
+<table><tr><th>Date</th><th>Title</th><th>Scan</th><th>Formats</th></tr>
+{% for r in reports %}
+<tr><td class="meta">{{ r.report_date }}</td>
+    <td><a href="{{ url_for('report_view', rid=r.id) }}">{{ r.title }}</a></td>
+    <td class="meta">#{{ r.scan_run_id }} ({{ r.scan_status or '?' }})</td>
+    <td><a href="{{ url_for('report_view', rid=r.id) }}">HTML</a> ·
+        <a href="{{ url_for('report_pdf', rid=r.id) }}">PDF</a> ·
+        <a href="{{ url_for('report_csv', rid=r.id) }}">CSV</a></td></tr>
+{% else %}<tr><td colspan="4" class="unknown">No reports yet. Reports are generated after each scan.</td></tr>
+{% endfor %}</table>
+</div>
+{% endblock %}

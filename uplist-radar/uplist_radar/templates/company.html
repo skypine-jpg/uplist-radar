@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}{{ c.ticker or c.name }} — Uplist Radar{% endblock %}
+{% block content %}
+<h1>{{ c.name }}</h1>
+<p>
+  <span class="pill stage-{{ c.stage }}">{{ STAGES[c.stage].label }}</span>
+  <span class="strength s-{% if c.evidence_strength>=75 %}vs{% elif c.evidence_strength>=50 %}s{% elif c.evidence_strength>=25 %}m{% else %}w{% endif %}">{{ c.evidence_strength }}/100</span>
+  <span class="meta mono">CIK {{ c.cik }} · {{ c.ticker or 'ticker unknown' }}</span>
+</p>
+<p>
+  <form class="inline" method="post" action="{{ url_for('toggle_watch', cid=c.id) }}">
+    <button type="submit">{{ '★ Remove from watchlist' if on_watch else '☆ Add to watchlist' }}</button>
+  </form>
+  <form class="inline" method="post" action="{{ url_for('refresh_company', cid=c.id) }}">
+    <button type="submit">↻ Re-verify now</button>
+  </form>
+</p>
+
+<div class="grid cols-2">
+<div class="card">
+  <h2>Overview</h2>
+  <dl class="kv">
+    <dt>Target exchange</dt><dd>{{ c.target_exchange or '<span class="unknown">Unknown</span>'|safe }}</dd>
+    <dt>Proposed new ticker</dt><dd>{{ c.proposed_ticker or '<span class="unknown">Unknown</span>'|safe }}</dd>
+    <dt>OTC status</dt><dd>{{ c.otc_status or 'unknown' }}{% if c.otc_evidence %} — <span class="meta">{{ c.otc_evidence }}</span>{% endif %}</dd>
+    <dt>Current venue (SEC)</dt><dd>{{ c.current_exchange or '<span class="unknown">Unknown</span>'|safe }}</dd>
+    <dt>Sector / SIC</dt><dd>{{ c.sector or 'Unknown' }}{% if c.sic %} ({{ c.sic }} — {{ c.sic_description }}){% endif %}</dd>
+    <dt>Incorporated</dt><dd>{{ c.state_of_incorp or '<span class="unknown">Unknown</span>'|safe }}</dd>
+    <dt>Website</dt><dd>{% if c.website %}<a href="{{ c.website }}">{{ c.website }}</a>{% else %}<span class="unknown">Unknown</span>{% endif %}</dd>
+    <dt>Last checked</dt><dd>{{ c.last_checked_at or '<span class="unknown">Unknown</span>'|safe }}</dd>
+    <dt>Stage updated</dt><dd>{{ c.stage_updated_at or '<span class="unknown">Unknown</span>'|safe }}</dd>
+  </dl>
+</div>
+<div class="card">
+  <h2>Quote &amp; financials</h2>
+  {% if snap %}
+  <dl class="kv">
+    <dt>Price</dt><dd>{% if snap.price %}{{ snap.currency }} {{ snap.price }} <span class="meta">(delayed={{ 'yes' if snap.is_delayed else 'no' }}, {{ snap.quote_time or snap.as_of }})</span>{% else %}<span class="unknown">Unknown — no licensed market-data provider configured</span>{% endif %}</dd>
+    <dt>Volume</dt><dd>{{ snap.volume or '<span class="unknown">Unknown</span>'|safe }}</dd>
+    <dt>Market cap</dt><dd>{% if snap.market_cap %}${{ '{:,.0f}'.format(snap.market_cap) }}{% else %}<span class="unknown">Unknown</span>{% endif %}</dd>
+    <dt>Shares out.</dt><dd>{% if snap.shares_outstanding %}{{ '{:,.0f}'.format(snap.shares_outstanding) }}{% else %}<span class="unknown">Unknown</span>{% endif %}</dd>
+    <dt>Provider</dt><dd class="meta">{{ snap.provider }} · snapshot {{ snap.as_of }}</dd>
+  </dl>
+  {% else %}<p class="unknown">No market snapshot yet.</p>{% endif %}
+  {% if fin_summary %}
+  <h3>Latest balance-sheet facts (XBRL)</h3>
+  <dl class="kv">
+    {% for k,v in fin_summary.items() %}<dt>{{ k.replace('_',' ') }}</dt><dd>{{ v }}</dd>{% endfor %}
+  </dl>
+  {% endif %}
+  <p class="meta">Exchange listing requirements involve multiple criteria and standards — a share price above a threshold alone does not establish eligibility.</p>
+</div>
+</div>
+
+<div class="card">
+  <h2>What remains? <span class="meta">({{ group.label }})</span></h2>
+  <p class="meta">Next publicly verifiable milestone: <b>{{ next_milestone }}</b><br>
+  Evidence freshness: {% if freshness_days is not none %}{{ freshness_days }} days since latest evidence{% if freshness_days > 180 %} — <span class="warn-text">stale; flag without assuming abandonment</span>{% endif %}{% else %}<span class="unknown">Unknown</span>{% endif %}.
+  Unknown stays unknown — nothing here is inferred.</p>
+  <table><tr><th>Item</th><th>Status</th><th>Detail &amp; source</th></tr>
+  {% for i in checklist %}
+  <tr>
+    <td>{{ i.item }}</td>
+    <td><span class="pill status-{{ i.status }}">{{ i.status.replace('_',' ') }}</span></td>
+    <td class="meta">{{ i.detail }}{% if i.source and i.source.excerpt %}<div class="excerpt">“{{ i.source.excerpt[:260] }}{% if i.source.excerpt|length > 260 %}…{% endif %}”</div><div><a href="{{ i.source.url or ('https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=' + c.cik + '&type=&dateb=&owner=include&count=40&action=getcompany') }}" target="_blank" rel="noopener">{{ i.source.form }} {{ i.source.filing_date }}{% if i.source.accession %} · {{ i.source.accession }}{% endif %}</a></div>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </table>
+</div>
+
+<div class="grid cols-2">
+<div class="card">
+  <h2>Evidence strength — rule breakdown</h2>
+  {% if breakdown %}<table><tr><th>Rule</th><th>Pts</th><th>Note</th></tr>
+  {% for b in breakdown %}<tr><td class="mono">{{ b.rule }}</td><td>{{ b.points }}</td><td class="meta">{{ b.note }}</td></tr>{% endfor %}</table>
+  {% else %}<p class="unknown">No scoring rules fired.</p>{% endif %}
+  <p class="meta">Deterministic documentation score (0–100). Not a probability of approval.</p>
+</div>
+<div class="card">
+  <h2>Financial &amp; trading risk flags</h2>
+  {% if flags %}<table><tr><th>Flag</th><th>Severity</th><th>Detail</th></tr>
+  {% for fl in flags %}<tr><td class="mono">{{ fl.flag }}</td><td><span class="pill sev-{{ fl.severity }}">{{ fl.severity }}</span></td><td>{{ fl.detail }}{% if fl.evidence %} <span class="meta">({{ fl.evidence }})</span>{% endif %}</td></tr>{% endfor %}</table>
+  {% else %}<p class="unknown">No supported risk flags.</p>{% endif %}
+</div>
+</div>
+
+<div class="card">
+  <h2>Timeline</h2>
+  <div class="timeline">
+  {% for t in timeline %}
+    <div class="event {% if t.kind=='stage' %}stage-ev{% endif %}">
+      <b>{{ t.date or '?' }}</b> — {{ t.title }}
+      {% if t.kind=='stage' %}<div class="meta">{{ t.ref.reason }}</div>{% endif %}
+      {% if t.kind=='filing' %}<div class="meta"><a href="{{ t.ref.url }}" target="_blank" rel="noopener">SEC filing {{ t.ref.accession }}</a>{% if t.ref.is_amendment %} · amendment{% if t.ref.amends_accession %} of {{ t.ref.amends_accession }}{% endif %}{% endif %}</div>{% endif %}
+    </div>
+  {% endfor %}
+  </div>
+  {% if not timeline %}<p class="unknown">No timeline events.</p>{% endif %}
+</div>
+
+<div class="card">
+  <h2>Source documents &amp; evidence</h2>
+  {% for e in evidence %}
+    <div style="margin-bottom:1rem">
+      <b>{{ e.form }}</b> <span class="meta">filed {{ e.filing_date }} · <a href="{{ e.url }}" target="_blank" rel="noopener">{{ e.accession }}</a></span>
+      {% if e.is_excluded %}<span class="pill excluded">excluded: {{ e.exclusion_reason }}</span>
+      {% else %}<span class="pill stage-preparation">{{ e.evidence_type }}</span>{% endif %}
+      {% if e.exchange_mentioned %}<span class="meta">exchange: {{ e.exchange_mentioned }}</span>{% endif %}
+      {% if e.security_type and e.security_type!='unknown' %}<span class="meta">security: {{ e.security_type }}</span>{% endif %}
+      <div class="excerpt">“{{ e.excerpt }}”</div>
+      {% if e.context %}<div class="meta">{{ e.context }}</div>{% endif %}
+      {% if e.event_date %}<div class="meta">Event date: {{ e.event_date }}</div>{% endif %}
+    </div>
+  {% else %}<p class="unknown">No evidence extracted yet.</p>{% endfor %}
+</div>
+
+<div class="grid cols-2">
+<div class="card">
+  <h2>Stage history (audit trail)</h2>
+  {% if history %}<table><tr><th>When</th><th>Change</th><th>Reason</th><th>By</th></tr>
+  {% for h in history %}<tr><td class="meta">{{ h.changed_at[:16] }}</td>
+    <td>{{ STAGES[h.from_stage].label if h.from_stage else '—' }} → <b>{{ STAGES[h.to_stage].label }}</b></td>
+    <td class="meta">{{ h.reason }}</td><td class="meta">{{ h.actor }}</td></tr>{% endfor %}</table>
+  {% else %}<p class="unknown">No stage changes recorded.</p>{% endif %}
+</div>
+<div class="card">
+  <h2>Research notes (private)</h2>
+  {% for n in notes %}<div class="excerpt">{{ n.body }}<div class="meta">— {{ n.username }}, {{ n.created_at[:16] }}</div></div>{% endfor %}
+  <form method="post" action="{{ url_for('add_note', cid=c.id) }}">
+    <textarea name="body" rows="3" style="width:100%" placeholder="Private research note…"></textarea><br>
+    <button class="primary" type="submit">Add note</button>
+  </form>
+</div>
+</div>
+{% endblock %}
